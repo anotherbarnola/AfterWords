@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 
 export default function App() {
-  const [page, setPage] = useState("landing"); // 'landing', 'login', 'register', 'dashboard', 'compose', 'contacts'
+  const [page, setPage] = useState("landing"); // 'landing', 'login', 'register', 'dashboard', 'compose', 'contacts', 'verify-email', 'forgot-password', 'reset-password'
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem("token") || "");
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
   const [messages, setMessages] = useState([]);
   const [contacts, setContacts] = useState([]);
 
@@ -14,6 +15,17 @@ export default function App() {
   const [regName, setRegName] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
+
+  // Email Verification states
+  const [verifyEmailAddress, setVerifyEmailAddress] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [debugVerifyToken, setDebugVerifyToken] = useState("");
+
+  // Forgot Password / Reset Password states
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [debugResetToken, setDebugResetToken] = useState("");
 
   // Compose states
   const [msgSubject, setMsgSubject] = useState("");
@@ -29,6 +41,18 @@ export default function App() {
   // Loading states
   const [loading, setLoading] = useState(false);
 
+  // Check for reset-password token in URL query params on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenParam = params.get("token");
+    if (tokenParam) {
+      // Clear query params to keep URL clean
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setResetToken(tokenParam);
+      setPage("reset-password");
+    }
+  }, []);
+
   // Sync token to localStorage and fetch user data
   useEffect(() => {
     if (token) {
@@ -37,7 +61,7 @@ export default function App() {
     } else {
       localStorage.removeItem("token");
       setUser(null);
-      if (page !== "login" && page !== "register" && page !== "landing") {
+      if (page !== "login" && page !== "register" && page !== "landing" && page !== "forgot-password" && page !== "reset-password") {
         setPage("landing");
       }
     }
@@ -45,7 +69,7 @@ export default function App() {
 
   // Fetch lists when logged in
   useEffect(() => {
-    if (user) {
+    if (user && user.is_email_verified) {
       fetchMessages();
       fetchContacts();
     }
@@ -59,7 +83,12 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
-        if (page === "landing" || page === "login" || page === "register") {
+        
+        // Redirect to email verification if not verified
+        if (data.user && !data.user.is_email_verified) {
+          setVerifyEmailAddress(data.user.email);
+          setPage("verify-email");
+        } else if (page === "landing" || page === "login" || page === "register" || page === "verify-email") {
           setPage("dashboard");
         }
       } else {
@@ -102,6 +131,7 @@ export default function App() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
+    setSuccessMsg("");
     setLoading(true);
     try {
       const res = await fetch("/api/auth/login", {
@@ -114,7 +144,12 @@ export default function App() {
         setToken(data.token);
         setLoginEmail("");
         setLoginPassword("");
-        setPage("dashboard");
+        if (data.user && !data.user.is_email_verified) {
+          setVerifyEmailAddress(data.user.email);
+          setPage("verify-email");
+        } else {
+          setPage("dashboard");
+        }
       } else {
         setError(data.error || "Login failed");
       }
@@ -128,6 +163,7 @@ export default function App() {
   const handleRegister = async (e) => {
     e.preventDefault();
     setError("");
+    setSuccessMsg("");
     setLoading(true);
     try {
       const res = await fetch("/api/auth/signup", {
@@ -138,10 +174,14 @@ export default function App() {
       const data = await res.json();
       if (res.ok) {
         setToken(data.token);
+        setVerifyEmailAddress(regEmail);
         setRegName("");
         setRegEmail("");
         setRegPassword("");
-        setPage("dashboard");
+        if (data.user && data.user.debugToken) {
+          setDebugVerifyToken(data.user.debugToken);
+        }
+        setPage("verify-email");
       } else {
         setError(data.error || "Registration failed");
       }
@@ -152,8 +192,92 @@ export default function App() {
     }
   };
 
+  const handleVerifyEmail = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMsg("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: verifyEmailAddress, token: verificationCode }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccessMsg("Email successfully verified!");
+        setVerificationCode("");
+        setDebugVerifyToken("");
+        fetchUserProfile();
+      } else {
+        setError(data.error || "Verification failed");
+      }
+    } catch (err) {
+      setError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMsg("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccessMsg(data.message);
+        if (data.debugToken) {
+          setDebugResetToken(data.debugToken);
+        }
+        setForgotEmail("");
+      } else {
+        setError(data.error || "Failed to process request");
+      }
+    } catch (err) {
+      setError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMsg("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: resetToken, password: newPassword }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccessMsg("Password reset successfully! You can now log in.");
+        setResetToken("");
+        setNewPassword("");
+        setDebugResetToken("");
+        setPage("login");
+      } else {
+        setError(data.error || "Failed to reset password");
+      }
+    } catch (err) {
+      setError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCheckIn = async () => {
     setError("");
+    setSuccessMsg("");
     try {
       const res = await fetch("/api/check-ins", {
         method: "POST",
@@ -189,6 +313,7 @@ export default function App() {
   const handleCreateMessage = async (e) => {
     e.preventDefault();
     setError("");
+    setSuccessMsg("");
     setLoading(true);
 
     const validRecipients = recipients.filter(r => r.name && r.email);
@@ -228,6 +353,7 @@ export default function App() {
   const handleCreateContact = async (e) => {
     e.preventDefault();
     setError("");
+    setSuccessMsg("");
     setLoading(true);
     try {
       const res = await fetch("/api/trusted-contacts", {
@@ -270,16 +396,21 @@ export default function App() {
       {/* Header Navigation */}
       <header className="navbar">
         <div className="nav-brand" onClick={() => setPage("landing")}>
-          <span className="brand-icon">🕊️</span>
+          <img src="/logo.png" alt="AfterWords" className="brand-logo" />
           <span className="brand-name">AfterWords</span>
         </div>
         <nav className="nav-links">
-          {user ? (
+          {user && user.is_email_verified ? (
             <>
               <span className="welcome-tag">Hello, {user.name}</span>
               <button className={`nav-btn ${page === "dashboard" ? "active" : ""}`} onClick={() => setPage("dashboard")}>Dashboard</button>
               <button className={`nav-btn ${page === "compose" ? "active" : ""}`} onClick={() => setPage("compose")}>Compose</button>
               <button className={`nav-btn ${page === "contacts" ? "active" : ""}`} onClick={() => setPage("contacts")}>Trusted Contacts</button>
+              <button className="nav-btn logout-btn" onClick={handleLogout}>Log Out</button>
+            </>
+          ) : user && !user.is_email_verified ? (
+            <>
+              <span className="welcome-tag">Hello, {user.name} (Unverified)</span>
               <button className="nav-btn logout-btn" onClick={handleLogout}>Log Out</button>
             </>
           ) : (
@@ -294,6 +425,7 @@ export default function App() {
       {/* Main Content Area */}
       <main className="main-content">
         {error && <div className="error-banner">{error}</div>}
+        {successMsg && <div className="success-banner">{successMsg}</div>}
 
         {/* Landing Page */}
         {page === "landing" && (
@@ -304,7 +436,7 @@ export default function App() {
             </p>
             <div className="hero-ctas">
               {user ? (
-                <button className="primary-btn big" onClick={() => setPage("dashboard")}>Go to Dashboard</button>
+                <button className="primary-btn big" onClick={() => setPage(user.is_email_verified ? "dashboard" : "verify-email")}>Go to Dashboard</button>
               ) : (
                 <>
                   <button className="primary-btn big" onClick={() => setPage("register")}>Create Your Legacy Vault</button>
@@ -341,6 +473,9 @@ export default function App() {
               <div className="form-group">
                 <label>Password</label>
                 <input type="password" required value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} />
+              </div>
+              <div className="form-links" style={{ marginBottom: "15px", display: "flex", justifyContent: "flex-end" }}>
+                <span className="text-link small-text" onClick={() => setPage("forgot-password")}>Forgot Password?</span>
               </div>
               <button type="submit" className="primary-btn block" disabled={loading}>
                 {loading ? "Decrypting..." : "Unlock Vault"}
@@ -379,8 +514,95 @@ export default function App() {
           </div>
         )}
 
+        {/* Email Verification Page */}
+        {page === "verify-email" && (
+          <div className="form-card">
+            <h2>Verify Your Email</h2>
+            <p className="small-text" style={{ marginBottom: "20px", textAlign: "center" }}>
+              A 6-digit verification code has been sent to <strong>{verifyEmailAddress}</strong>. Please enter it below to arm your security system.
+            </p>
+            
+            {debugVerifyToken && (
+              <div className="debug-alert" style={{ background: "#fff9e6", border: "1px solid #ffe0b2", padding: "10px", borderRadius: "4px", marginBottom: "15px", fontSize: "0.85em", color: "#b78103" }}>
+                <strong>Dev Sandbox Bypass:</strong> Your verification code is: <code style={{ fontSize: "1.1em", fontWeight: "bold" }}>{debugVerifyToken}</code>
+              </div>
+            )}
+
+            <form onSubmit={handleVerifyEmail}>
+              <div className="form-group">
+                <label>6-Digit Verification Code</label>
+                <input type="text" required placeholder="e.g. 123456" maxLength="6" value={verificationCode} onChange={(e) => setVerificationCode(e.target.value)} style={{ textAlign: "center", fontSize: "1.5em", letterSpacing: "5px" }} />
+              </div>
+              <button type="submit" className="primary-btn block" disabled={loading}>
+                {loading ? "Verifying..." : "Verify & Activate Vault"}
+              </button>
+              <p className="form-footer" style={{ marginTop: "15px" }}>
+                Need to change account? <span className="text-link" onClick={handleLogout}>Log Out</span>
+              </p>
+            </form>
+          </div>
+        )}
+
+        {/* Forgot Password Page */}
+        {page === "forgot-password" && (
+          <div className="form-card">
+            <h2>Forgot Your Password?</h2>
+            <p className="small-text" style={{ marginBottom: "20px", textAlign: "center" }}>
+              Enter your registered email address below. We'll send you a secure link to reset your vault access password.
+            </p>
+
+            {debugResetToken && (
+              <div className="debug-alert" style={{ background: "#fff9e6", border: "1px solid #ffe0b2", padding: "12px", borderRadius: "4px", marginBottom: "15px", fontSize: "0.85em", color: "#b78103" }}>
+                <strong>Dev Sandbox Link:</strong> A password reset token was generated. Click below to go directly to reset page:<br />
+                <button className="secondary-btn btn-sm" style={{ marginTop: "8px", width: "100%" }} onClick={() => { setResetToken(debugResetToken); setPage("reset-password"); }}>
+                  Go to Reset Password Screen
+                </button>
+              </div>
+            )}
+
+            <form onSubmit={handleForgotPassword}>
+              <div className="form-group">
+                <label>Email Address</label>
+                <input type="email" required placeholder="your-email@example.com" value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} />
+              </div>
+              <button type="submit" className="primary-btn block" disabled={loading}>
+                {loading ? "Processing..." : "Send Reset Link"}
+              </button>
+              <p className="form-footer">
+                Remember your password? <span className="text-link" onClick={() => setPage("login")}>Back to login</span>
+              </p>
+            </form>
+          </div>
+        )}
+
+        {/* Reset Password Page */}
+        {page === "reset-password" && (
+          <div className="form-card">
+            <h2>Reset Vault Password</h2>
+            <p className="small-text" style={{ marginBottom: "20px", textAlign: "center" }}>
+              Enter a new secure password for your legacy vault below.
+            </p>
+            <form onSubmit={handleResetPassword}>
+              <div className="form-group">
+                <label>Reset Token</label>
+                <input type="text" required placeholder="Enter token from email link" value={resetToken} onChange={(e) => setResetToken(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label>New Password</label>
+                <input type="password" required placeholder="At least 8 characters" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+              </div>
+              <button type="submit" className="primary-btn block" disabled={loading}>
+                {loading ? "Resetting Password..." : "Update Vault Password"}
+              </button>
+              <p className="form-footer">
+                Want to go back? <span className="text-link" onClick={() => setPage("login")}>Cancel</span>
+              </p>
+            </form>
+          </div>
+        )}
+
         {/* Dashboard */}
-        {page === "dashboard" && user && (
+        {page === "dashboard" && user && user.is_email_verified && (
           <div className="dashboard-grid">
             {/* Column 1: Switch / Profile */}
             <div className="dash-col shadow-card">
@@ -397,7 +619,7 @@ export default function App() {
               <button className="primary-btn heartbeat-btn block" onClick={handleCheckIn}>
                 👋 Click to Confirm You Are Alive
               </button>
-              <div className="profile-info">
+              <div className="profile-info" style={{ marginTop: "20px", borderTop: "1px solid #eee", paddingTop: "15px" }}>
                 <h4>Vault Details</h4>
                 <p><strong>Owner:</strong> {user.name}</p>
                 <p><strong>Email:</strong> {user.email}</p>
@@ -439,7 +661,7 @@ export default function App() {
         )}
 
         {/* Compose Page */}
-        {page === "compose" && user && (
+        {page === "compose" && user && user.is_email_verified && (
           <div className="compose-container shadow-card">
             <h2>Compose Legacy Letter</h2>
             <form onSubmit={handleCreateMessage}>
@@ -490,7 +712,7 @@ export default function App() {
         )}
 
         {/* Trusted Contacts Page */}
-        {page === "contacts" && user && (
+        {page === "contacts" && user && user.is_email_verified && (
           <div className="contacts-container">
             <div className="contacts-grid">
               <div className="contacts-list-section shadow-card">

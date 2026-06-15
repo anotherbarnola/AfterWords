@@ -3,6 +3,7 @@ const cors = require("cors");
 const path = require("path");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const db = require("./db");
 require("dotenv").config();
 
@@ -29,7 +30,10 @@ const authenticateToken = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const users = await db.query("SELECT id, email, name, subscription_status, last_check_in, check_in_interval_days, is_active FROM users WHERE id = ?", [decoded.userId]);
+    const users = await db.query(
+      "SELECT id, email, name, subscription_status, last_check_in, check_in_interval_days, is_active, is_email_verified FROM users WHERE id = ?",
+      [decoded.userId]
+    );
     
     if (users.length === 0) {
       return res.status(403).json({ error: "User not found or disabled" });
@@ -61,10 +65,11 @@ app.post("/api/auth/signup", async (req, res) => {
 
     const userId = crypto.randomUUID();
     const passwordHash = await bcrypt.hash(password, 10);
+    const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
 
     await db.execute(
-      "INSERT INTO users (id, email, password_hash, name, created_at, last_check_in) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))",
-      [userId, email, passwordHash, name]
+      "INSERT INTO users (id, email, password_hash, name, created_at, last_check_in, is_email_verified, verification_token) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), 0, ?)",
+      [userId, email, passwordHash, name, verificationToken]
     );
 
     // Auto check-in upon registration
@@ -75,6 +80,8 @@ app.post("/api/auth/signup", async (req, res) => {
 
     const token = jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: "30d" });
 
+    console.log(`[SIMULATED EMAIL] Verification email sent to ${email}. Token: ${verificationToken}`);
+
     res.status(201).json({
       token,
       user: {
@@ -83,6 +90,8 @@ app.post("/api/auth/signup", async (req, res) => {
         name,
         subscription_status: "free",
         check_in_interval_days: 30,
+        is_email_verified: 0,
+        debugToken: verificationToken
       }
     });
   } catch (error) {
@@ -131,6 +140,7 @@ app.post("/api/auth/login", async (req, res) => {
         name: user.name,
         subscription_status: user.subscription_status,
         check_in_interval_days: user.check_in_interval_days,
+        is_email_verified: user.is_email_verified
       }
     });
   } catch (error) {
@@ -142,6 +152,104 @@ app.post("/api/auth/login", async (req, res) => {
 // Get Current User
 app.get("/api/auth/me", authenticateToken, (req, res) => {
   res.json({ user: req.user });
+});
+
+// Verify Email
+app.post("/api/auth/verify-email", async (req, res) => {
+  const { email, token } = req.body;
+
+  if (!email || !token) {
+    return res.status(400).json({ error: "Email and token are required" });
+  }
+
+  try {
+    const users = await db.query("SELECT id, verification_token FROM users WHERE email = ?", [email]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const user = users[0];
+    if (user.verification_token !== token) {
+      return res.status(400).json({ error: "Invalid verification token" });
+    }
+
+    await db.execute(
+      "UPDATE users SET is_email_verified = 1, verification_token = NULL WHERE id = ?",
+      [user.id]
+    );
+
+    res.json({ message: "Email verified successfully" });
+  } catch (error) {
+    console.error("Verify email error:", error);
+    res.status(500).json({ error: "Internal server error during verification" });
+  }
+});
+
+// Forgot Password
+app.post("/api/auth/forgot-password", async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ error: "Email is required" });
+  }
+
+  try {
+    const users = await db.query("SELECT id FROM users WHERE email = ?", [email]);
+    if (users.length === 0) {
+      // Return 200 for security, but don't log link
+      return res.json({ message: "If that email exists, a reset link has been sent." });
+    }
+
+    const user = users[0];
+    const resetToken = crypto.randomUUID();
+    const expires = new Date(Date.now() + 3600000).toISOString(); // 1 hour expiry
+
+    await db.execute(
+      "UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?",
+      [resetToken, expires, user.id]
+    );
+
+    console.log(`[SIMULATED EMAIL] Password reset requested for ${email}. Link: http://localhost:3000/reset-password?token=${resetToken}`);
+
+    res.json({ message: "If that email exists, a reset link has been sent.", debugToken: resetToken });
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Reset Password
+app.post("/api/auth/reset-password", async (req, res) => {
+  const { token, password } = req.body;
+
+  if (!token || !password) {
+    return res.status(400).json({ error: "Token and new password are required" });
+  }
+
+  try {
+    const users = await db.query("SELECT id, reset_token_expires FROM users WHERE reset_token = ?", [token]);
+    if (users.length === 0) {
+      return res.status(400).json({ error: "Invalid or expired token" });
+    }
+
+    const user = users[0];
+    const now = new Date().toISOString();
+    if (user.reset_token_expires < now) {
+      return res.status(400).json({ error: "Token has expired" });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await db.execute(
+      "UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?",
+      [passwordHash, user.id]
+    );
+
+    res.json({ message: "Password reset successful" });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 
