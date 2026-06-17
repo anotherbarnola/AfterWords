@@ -429,36 +429,88 @@ export default function App() {
 
         {/* Landing Page */}
         {page === "landing" && (
-          <section className="landing-hero">
-            <h1 className="hero-title">Words that live on, securely delivered.</h1>
-            <p className="hero-subtitle">
-              Write meaningful messages to your children, spouse, or legacy heirs today. If your dead man's switch misses a check-in, we verify your status and securely release your final thoughts.
-            </p>
-            <div className="hero-ctas">
-              {user ? (
-                <button className="primary-btn big" onClick={() => setPage(user.is_email_verified ? "dashboard" : "verify-email")}>Go to Dashboard</button>
-              ) : (
-                <>
-                  <button className="primary-btn big" onClick={() => setPage("register")}>Create Your Legacy Vault</button>
-                  <button className="secondary-btn big" onClick={() => setPage("login")}>Access Vault</button>
-                </>
-              )}
-            </div>
-            <div className="features-grid">
-              <div className="feature-card">
-                <h3>🕰️ Dead Man's Switch</h3>
-                <p>Configure a schedule (e.g., every 30 days). A simple click checks you in as active and healthy.</p>
+          <>
+            {/* Hero Section */}
+            <section className="landing-hero">
+              <div className="hero-badge">Secure Digital Legacy</div>
+              <h1 className="hero-title">
+                Write messages today.<br />
+                <span className="hero-highlight">Delivered to loved ones after you're gone.</span>
+              </h1>
+              <p className="hero-subtitle">
+                AfterWords lets you record your most meaningful thoughts, wisdom, and love for the people who matter most.
+                Your messages stay safely sealed in your personal vault — and, through gentle check-ins and
+                trusted verification, they are only released when the time is right.
+              </p>
+              <div className="hero-ctas">
+                {user ? (
+                  <button className="primary-btn big" onClick={() => setPage(user.is_email_verified ? "dashboard" : "verify-email")}>Go to Dashboard</button>
+                ) : (
+                  <>
+                    <button className="primary-btn big" onClick={() => setPage("register")}>Start Your Legacy Vault</button>
+                    <button className="secondary-btn big" onClick={() => setPage("login")}>Access Your Vault</button>
+                  </>
+                )}
               </div>
-              <div className="feature-card">
-                <h3>👥 Trusted Verification</h3>
-                <p>Designate trusted contacts who will be notified and asked to verify your status if you ever miss a check-in.</p>
+              <div className="hero-trust">
+                <span className="trust-pill">🔒 Bank-Grade Security</span>
+                <span className="trust-pill">💌 Warm &amp; Personal</span>
+                <span className="trust-pill">🕊️ Peace of Mind</span>
               </div>
-              <div className="feature-card">
-                <h3>🔒 Encrypted Storage</h3>
-                <p>Your messages remain absolutely secure, private, and unreleased until trigger conditions are strictly met.</p>
+            </section>
+
+            {/* How It Works */}
+            <section className="how-it-works">
+              <h2 className="section-title">How It Works</h2>
+              <p className="section-subtitle">Three simple steps to leave your legacy.</p>
+              <div className="steps-grid">
+                <div className="step-card">
+                  <div className="step-number">1</div>
+                  <h3>Write Your Letters</h3>
+                  <p>Compose heartfelt messages — words of wisdom, love letters, or guidance — and assign them to your loved ones.</p>
+                </div>
+                <div className="step-card">
+                  <div className="step-number">2</div>
+                  <h3>Set Your Rhythm</h3>
+                  <p>Choose a check-in schedule that fits your life. A simple click lets us know you're alright.</p>
+                </div>
+                <div className="step-card">
+                  <div className="step-number">3</div>
+                  <h3>They Arrive When Needed</h3>
+                  <p>If you ever miss a check-in, your trusted circle verifies the situation, and your messages are delivered with care.</p>
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+
+            {/* Features */}
+            <section className="features-section">
+              <h2 className="section-title">Your Legacy, Protected with Care</h2>
+              <div className="features-grid">
+                <div className="feature-card">
+                  <div className="feature-icon">💓</div>
+                  <h3>Gentle Life Check</h3>
+                  <p>Configure a check-in schedule — daily, weekly, or monthly. A single tap confirms you're well and your vault stays sealed.</p>
+                </div>
+                <div className="feature-card">
+                  <div className="feature-icon">👥</div>
+                  <h3>Trusted Circle</h3>
+                  <p>Designate people who love you. If you ever miss a check-in, they help verify your status before any message is released.</p>
+                </div>
+                <div className="feature-card">
+                  <div className="feature-icon">🔐</div>
+                  <h3>Bank-Grade Vault</h3>
+                  <p>Your legacy letters are stored with enterprise-level encryption. Nothing is shared until your trusted circle confirms it's time.</p>
+                </div>
+              </div>
+            </section>
+
+            {/* Final CTA */}
+            <section className="cta-section">
+              <h2>Don't leave important words unsaid.</h2>
+              <p>Start your legacy vault today — it's free to create, and your loved ones pay only $1 to unlock each message when the time comes.</p>
+              <button className="primary-btn big" onClick={() => setPage("register")}>Create Your Legacy Vault Free</button>
+            </section>
+          </>
         )}
 
         {/* Login Page */}
@@ -771,8 +823,19 @@ export default function App() {
 
       {/* Footer */}
       <footer className="footer">
-        <p>© {new Date().getFullYear()} AfterWords Platform. Ensuring no important words are left unsaid.</p>
-        <p className="small-text">Bank-grade security. Secure legacy distribution.</p>
+        <div className="footer-inner">
+          <div className="footer-brand">
+            <img src="/logo.png" alt="AfterWords" className="footer-logo" />
+            <span className="footer-name">AfterWords</span>
+          </div>
+          <p className="footer-tagline">Ensuring no important words are left unsaid. ❤️</p>
+          <div className="footer-links">
+            <span className="text-link" onClick={() => setPage("landing")}>Home</span>
+            <span className="text-link" onClick={() => setPage("register")}>Create Vault</span>
+            <span className="text-link" onClick={() => setPage("login")}>Access Vault</span>
+          </div>
+          <p className="footer-copy">© {new Date().getFullYear()} AfterWords. Bank-grade security. Heartfelt delivery.</p>
+        </div>
       </footer>
     </div>
   );
